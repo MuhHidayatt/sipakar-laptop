@@ -2,3 +2,6 @@ project_id = "hpxjrksglwxetgklezxv"
 
 [functions.ai-diagnosis]
 verify_jwt = false
+
+[functions.ai-diagnosis-image]
+verify_jwt = false

@@ -11,7 +11,10 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AIAnalysisCard } from '@/components/diagnosis/AIAnalysisCard';
+import { ImageUploadCard } from '@/components/diagnosis/ImageUploadCard';
+import { ImageAnalysisResult } from '@/components/diagnosis/ImageAnalysisResult';
 import { 
   Laptop, 
   Search, 
@@ -21,7 +24,9 @@ import {
   FileDown,
   RefreshCw,
   Wrench,
-  Brain
+  Brain,
+  Camera,
+  ClipboardList
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -64,6 +69,22 @@ interface AIAnalysis {
   alternative_causes: string[];
 }
 
+interface DetectedIssue {
+  issue: string;
+  severity: 'ringan' | 'sedang' | 'berat';
+  location: string;
+  description: string;
+}
+
+interface ImageAnalysis {
+  detected_issues: DetectedIssue[];
+  confidence: number;
+  diagnosis_summary: string;
+  recommended_repairs: string[];
+  estimated_urgency: 'segera' | 'dalam waktu dekat' | 'bisa ditunda';
+  additional_notes: string;
+}
+
 export default function Konsultasi() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -78,6 +99,14 @@ export default function Konsultasi() {
   const [showResults, setShowResults] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  
+  // Image diagnosis state
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState<string>('');
+  const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
+  const [imageAnalyzing, setImageAnalyzing] = useState(false);
+  const [showImageResults, setShowImageResults] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('symptoms');
 
   useEffect(() => {
     fetchData();
@@ -197,6 +226,60 @@ export default function Konsultasi() {
     setShowResults(false);
     setAiAnalysis(null);
     setAiLoading(false);
+    // Reset image state
+    setImageBase64(null);
+    setImageMimeType('');
+    setImageAnalysis(null);
+    setShowImageResults(false);
+  };
+
+  const handleImageSelect = (base64: string, mimeType: string) => {
+    setImageBase64(base64);
+    setImageMimeType(mimeType);
+    setImageAnalysis(null);
+    setShowImageResults(false);
+  };
+
+  const handleImageDiagnose = async () => {
+    if (!imageBase64) {
+      toast.error('Pilih gambar terlebih dahulu');
+      return;
+    }
+
+    setImageAnalyzing(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-diagnosis-image', {
+        body: {
+          imageBase64,
+          mimeType: imageMimeType,
+        },
+      });
+
+      if (error) {
+        console.error('Image analysis error:', error);
+        toast.error('Analisis gambar gagal. Silakan coba lagi.');
+        return;
+      }
+
+      if (data?.image_analysis) {
+        setImageAnalysis(data.image_analysis);
+        setShowImageResults(true);
+        toast.success('Analisis gambar selesai!');
+      }
+    } catch (err) {
+      console.error('Image analysis failed:', err);
+      toast.error('Terjadi kesalahan saat menganalisis gambar');
+    } finally {
+      setImageAnalyzing(false);
+    }
+  };
+
+  const handleImageReset = () => {
+    setImageBase64(null);
+    setImageMimeType('');
+    setImageAnalysis(null);
+    setShowImageResults(false);
   };
 
   const exportPDF = () => {
@@ -318,70 +401,85 @@ export default function Konsultasi() {
               Konsultasi Diagnosa
             </div>
             <h1 className="text-3xl md:text-4xl font-bold mb-3">
-              Pilih Gejala Kerusakan
+              Diagnosa Kerusakan Laptop
             </h1>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              Centang gejala-gejala yang dialami laptop Anda, lalu klik tombol diagnosa untuk mendapatkan hasil analisis.
+              Pilih metode diagnosa: berdasarkan gejala atau upload gambar laptop untuk analisis visual AI.
             </p>
           </motion.div>
 
-          <AnimatePresence mode="wait">
-            {!showResults ? (
-              <motion.div
-                key="form"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                {/* Symptom Selection */}
-                <Card className="mb-6">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Laptop className="h-5 w-5" />
-                      Daftar Gejala
-                    </CardTitle>
-                    <CardDescription>
-                      Pilih semua gejala yang sesuai dengan kondisi laptop Anda
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {gejalaList.length === 0 ? (
-                      <Alert>
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
-                          Belum ada data gejala. Hubungi admin untuk menambahkan data.
-                        </AlertDescription>
-                      </Alert>
-                    ) : (
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        {gejalaList.map((gejala) => (
-                          <div
-                            key={gejala.id}
-                            className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
-                              selectedGejala.includes(gejala.kode_gejala)
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border hover:border-primary/50'
-                            }`}
-                            onClick={() => handleGejalaToggle(gejala.kode_gejala)}
-                          >
-                            <Checkbox
-                              checked={selectedGejala.includes(gejala.kode_gejala)}
-                              onCheckedChange={() => handleGejalaToggle(gejala.kode_gejala)}
-                            />
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">
-                                  {gejala.kode_gejala}
-                                </Badge>
+          {/* Diagnosis Method Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+            <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto">
+              <TabsTrigger value="symptoms" className="flex items-center gap-2">
+                <ClipboardList className="h-4 w-4" />
+                Pilih Gejala
+              </TabsTrigger>
+              <TabsTrigger value="image" className="flex items-center gap-2">
+                <Camera className="h-4 w-4" />
+                Upload Gambar
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Symptoms Tab Content */}
+            <TabsContent value="symptoms">
+              <AnimatePresence mode="wait">
+                {!showResults ? (
+                  <motion.div
+                    key="form"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    {/* Symptom Selection */}
+                    <Card className="mb-6">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Laptop className="h-5 w-5" />
+                          Daftar Gejala
+                        </CardTitle>
+                        <CardDescription>
+                          Pilih semua gejala yang sesuai dengan kondisi laptop Anda
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {gejalaList.length === 0 ? (
+                          <Alert>
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              Belum ada data gejala. Hubungi admin untuk menambahkan data.
+                            </AlertDescription>
+                          </Alert>
+                        ) : (
+                          <div className="grid sm:grid-cols-2 gap-3">
+                            {gejalaList.map((gejala) => (
+                              <div
+                                key={gejala.id}
+                                className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                                  selectedGejala.includes(gejala.kode_gejala)
+                                    ? 'border-primary bg-primary/5'
+                                    : 'border-border hover:border-primary/50'
+                                }`}
+                                onClick={() => handleGejalaToggle(gejala.kode_gejala)}
+                              >
+                                <Checkbox
+                                  checked={selectedGejala.includes(gejala.kode_gejala)}
+                                  onCheckedChange={() => handleGejalaToggle(gejala.kode_gejala)}
+                                />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      {gejala.kode_gejala}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm mt-1">{gejala.nama_gejala}</p>
+                                </div>
                               </div>
-                              <p className="text-sm mt-1">{gejala.nama_gejala}</p>
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                        )}
+                      </CardContent>
+                    </Card>
 
                 {/* Selected Summary */}
                 {selectedGejala.length > 0 && (
@@ -597,6 +695,76 @@ export default function Konsultasi() {
               </motion.div>
             )}
           </AnimatePresence>
+        </TabsContent>
+
+        {/* Image Tab Content */}
+        <TabsContent value="image">
+          <AnimatePresence mode="wait">
+            {!showImageResults ? (
+              <motion.div
+                key="image-form"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-6"
+              >
+                <ImageUploadCard 
+                  onImageSelect={handleImageSelect}
+                  isAnalyzing={imageAnalyzing}
+                />
+
+                {imageBase64 && (
+                  <div className="flex justify-center">
+                    <Button
+                      size="lg"
+                      onClick={handleImageDiagnose}
+                      disabled={imageAnalyzing}
+                      className="shadow-glow"
+                    >
+                      {imageAnalyzing ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Menganalisis Gambar...
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="mr-2 h-5 w-5" />
+                          Analisis Gambar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {!user && (
+                  <p className="text-center text-sm text-muted-foreground">
+                    <a href="/auth" className="text-primary hover:underline">Masuk</a> untuk menyimpan riwayat konsultasi
+                  </p>
+                )}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="image-results"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-6"
+              >
+                {imageAnalysis && (
+                  <ImageAnalysisResult analysis={imageAnalysis} />
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button variant="outline" onClick={handleImageReset}>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Analisis Gambar Lain
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </TabsContent>
+      </Tabs>
         </div>
       </div>
     </Layout>
