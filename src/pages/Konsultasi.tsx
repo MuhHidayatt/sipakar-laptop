@@ -11,6 +11,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { AIAnalysisCard } from '@/components/diagnosis/AIAnalysisCard';
 import { 
   Laptop, 
   Search, 
@@ -19,7 +20,8 @@ import {
   CheckCircle2,
   FileDown,
   RefreshCw,
-  Wrench
+  Wrench,
+  Brain
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -53,6 +55,15 @@ interface DiagnosisResult {
   gejala_terkait: string[];
 }
 
+interface AIAnalysis {
+  ai_confidence: number;
+  validation: 'agree' | 'partial' | 'disagree';
+  analysis: string;
+  additional_insights: string;
+  recommended_priority: 'high' | 'medium' | 'low';
+  alternative_causes: string[];
+}
+
 export default function Konsultasi() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -65,6 +76,8 @@ export default function Konsultasi() {
   const [loading, setLoading] = useState(true);
   const [diagnosing, setDiagnosing] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -112,14 +125,53 @@ export default function Konsultasi() {
     }
 
     setDiagnosing(true);
+    setAiAnalysis(null);
     
     // Simulate processing delay for UX
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     const diagnosisResults = diagnose(selectedGejala, rules, kerusakanList);
     setResults(diagnosisResults);
     setShowResults(true);
     setDiagnosing(false);
+
+    // Start AI analysis in parallel
+    if (diagnosisResults.length > 0) {
+      setAiLoading(true);
+      
+      // Get symptom names for AI
+      const symptomNames = selectedGejala.map(kg => {
+        const g = gejalaList.find(gj => gj.kode_gejala === kg);
+        return g?.nama_gejala || kg;
+      });
+
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-diagnosis', {
+          body: {
+            symptoms: selectedGejala,
+            symptomNames,
+            cfResults: diagnosisResults.slice(0, 5).map(r => ({
+              kode_kerusakan: r.kode_kerusakan,
+              nama_kerusakan: r.nama_kerusakan,
+              nilai_cf: r.nilai_cf,
+              persentase: r.persentase,
+              solusi: r.solusi,
+            })),
+          },
+        });
+
+        if (error) {
+          console.error('AI analysis error:', error);
+          toast.error('Analisis AI gagal, tetapi hasil CF tetap valid');
+        } else if (data?.ai_analysis) {
+          setAiAnalysis(data.ai_analysis);
+        }
+      } catch (err) {
+        console.error('AI analysis failed:', err);
+      } finally {
+        setAiLoading(false);
+      }
+    }
 
     // Save consultation if user is logged in
     if (user && diagnosisResults.length > 0) {
@@ -143,6 +195,8 @@ export default function Konsultasi() {
     setSelectedGejala([]);
     setResults([]);
     setShowResults(false);
+    setAiAnalysis(null);
+    setAiLoading(false);
   };
 
   const exportPDF = () => {
@@ -415,7 +469,7 @@ export default function Konsultasi() {
                       <div className="gradient-primary p-6 text-primary-foreground">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="text-sm opacity-90 mb-1">Hasil Diagnosa Utama</p>
+                            <p className="text-sm opacity-90 mb-1">Hasil Diagnosa Utama (Certainty Factor)</p>
                             <h2 className="text-2xl md:text-3xl font-bold mb-2">
                               {results[0].nama_kerusakan}
                             </h2>
@@ -444,6 +498,35 @@ export default function Konsultasi() {
                         </div>
                       </CardContent>
                     </Card>
+
+                    {/* AI Analysis Card */}
+                    {(aiLoading || aiAnalysis) && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-6"
+                      >
+                        {aiLoading ? (
+                          <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
+                            <CardHeader>
+                              <CardTitle className="flex items-center gap-2 text-lg">
+                                <Brain className="h-5 w-5 animate-pulse" />
+                                Analisis AI Sedang Memproses...
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-3">
+                                <div className="h-4 bg-muted animate-pulse rounded w-3/4"></div>
+                                <div className="h-4 bg-muted animate-pulse rounded w-1/2"></div>
+                                <div className="h-4 bg-muted animate-pulse rounded w-2/3"></div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ) : aiAnalysis ? (
+                          <AIAnalysisCard analysis={aiAnalysis} />
+                        ) : null}
+                      </motion.div>
+                    )}
 
                     {/* Other Results */}
                     {results.length > 1 && (

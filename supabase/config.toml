@@ -1,1 +1,4 @@
 project_id = "hpxjrksglwxetgklezxv"
+
+[functions.ai-diagnosis]
+verify_jwt = false
