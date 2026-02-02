@@ -71,10 +71,12 @@ export type Database = {
           gejala_dipilih: string[]
           hasil_kerusakan: string | null
           id: string
+          image_analysis: Json | null
           nama_kerusakan: string | null
           nilai_cf: number | null
           solusi: string | null
           tanggal: string
+          tipe_konsultasi: string | null
           user_id: string | null
         }
         Insert: {
@@ -82,10 +84,12 @@ export type Database = {
           gejala_dipilih: string[]
           hasil_kerusakan?: string | null
           id?: string
+          image_analysis?: Json | null
           nama_kerusakan?: string | null
           nilai_cf?: number | null
           solusi?: string | null
           tanggal?: string
+          tipe_konsultasi?: string | null
           user_id?: string | null
         }
         Update: {
@@ -93,10 +97,12 @@ export type Database = {
           gejala_dipilih?: string[]
           hasil_kerusakan?: string | null
           id?: string
+          image_analysis?: Json | null
           nama_kerusakan?: string | null
           nilai_cf?: number | null
           solusi?: string | null
           tanggal?: string
+          tipe_konsultasi?: string | null
           user_id?: string | null
         }
         Relationships: []

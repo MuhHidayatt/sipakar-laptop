@@ -14,7 +14,9 @@ import {
   Calendar, 
   AlertCircle,
   ChevronRight,
-  FileDown
+  FileDown,
+  Camera,
+  ClipboardList
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -22,6 +24,20 @@ import { id } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
+
+interface ImageAnalysis {
+  detected_issues?: Array<{
+    issue: string;
+    severity: string;
+    location: string;
+    description: string;
+  }>;
+  confidence: number;
+  diagnosis_summary: string;
+  recommended_repairs?: string[];
+  estimated_urgency?: string;
+  additional_notes?: string;
+}
 
 interface Konsultasi {
   id: string;
@@ -31,6 +47,8 @@ interface Konsultasi {
   nama_kerusakan: string | null;
   nilai_cf: number | null;
   solusi: string | null;
+  tipe_konsultasi?: string | null;
+  image_analysis?: ImageAnalysis | null;
 }
 
 export default function Riwayat() {
@@ -60,7 +78,10 @@ export default function Riwayat() {
         .order('tanggal', { ascending: false });
 
       if (error) throw error;
-      setKonsultasiList(data || []);
+      setKonsultasiList((data || []).map(item => ({
+        ...item,
+        image_analysis: item.image_analysis as unknown as ImageAnalysis | null,
+      })));
     } catch (error) {
       console.error('Error fetching konsultasi:', error);
       toast.error('Gagal memuat riwayat');
@@ -185,14 +206,32 @@ export default function Riwayat() {
                             {format(new Date(konsultasi.tanggal), 'EEEE, d MMMM yyyy - HH:mm', { locale: id })}
                           </div>
                           
-                          <h3 className="text-lg font-semibold mb-2">
-                            {konsultasi.nama_kerusakan || 'Tidak terdeteksi'}
-                          </h3>
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-lg font-semibold">
+                              {konsultasi.nama_kerusakan || 'Tidak terdeteksi'}
+                            </h3>
+                            <Badge variant="outline" className="text-xs">
+                              {konsultasi.tipe_konsultasi === 'gambar' ? (
+                                <><Camera className="h-3 w-3 mr-1" /> Gambar</>
+                              ) : (
+                                <><ClipboardList className="h-3 w-3 mr-1" /> Gejala</>
+                              )}
+                            </Badge>
+                          </div>
                           
                           <div className="flex items-center gap-3 mb-3">
-                            <Badge variant={konsultasi.hasil_kerusakan ? 'default' : 'secondary'}>
-                              {konsultasi.hasil_kerusakan || 'N/A'}
-                            </Badge>
+                            {konsultasi.tipe_konsultasi === 'gambar' && konsultasi.image_analysis ? (
+                              <Badge variant={
+                                konsultasi.image_analysis.estimated_urgency === 'segera' ? 'destructive' : 
+                                konsultasi.image_analysis.estimated_urgency === 'dalam waktu dekat' ? 'default' : 'secondary'
+                              }>
+                                {konsultasi.image_analysis.estimated_urgency || 'N/A'}
+                              </Badge>
+                            ) : (
+                              <Badge variant={konsultasi.hasil_kerusakan ? 'default' : 'secondary'}>
+                                {konsultasi.hasil_kerusakan || 'N/A'}
+                              </Badge>
+                            )}
                             {konsultasi.nilai_cf && (
                               <Badge variant={interpretCF(konsultasi.nilai_cf).color === 'success' ? 'default' : 'outline'}>
                                 {Math.round(konsultasi.nilai_cf * 100)}% {interpretCF(konsultasi.nilai_cf).label}
@@ -201,7 +240,10 @@ export default function Riwayat() {
                           </div>
                           
                           <p className="text-sm text-muted-foreground">
-                            {konsultasi.gejala_dipilih.length} gejala dipilih
+                            {konsultasi.tipe_konsultasi === 'gambar' 
+                              ? `${konsultasi.image_analysis?.detected_issues?.length || 0} masalah terdeteksi`
+                              : `${konsultasi.gejala_dipilih.length} gejala dipilih`
+                            }
                           </p>
                         </div>
                         

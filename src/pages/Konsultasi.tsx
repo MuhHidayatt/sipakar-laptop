@@ -263,9 +263,29 @@ export default function Konsultasi() {
       }
 
       if (data?.image_analysis) {
-        setImageAnalysis(data.image_analysis);
+        const analysis = data.image_analysis as ImageAnalysis;
+        setImageAnalysis(analysis);
         setShowImageResults(true);
         toast.success('Analisis gambar selesai!');
+
+        // Save to database if user is logged in
+        if (user) {
+          try {
+            const topIssue = analysis.detected_issues?.[0];
+            await supabase.from('konsultasi').insert({
+              user_id: user.id,
+              gejala_dipilih: analysis.detected_issues?.map(i => i.issue) || [],
+              hasil_kerusakan: topIssue?.severity || null,
+              nama_kerusakan: analysis.diagnosis_summary || 'Analisis Gambar',
+              nilai_cf: analysis.confidence / 100,
+              solusi: analysis.recommended_repairs?.join('; ') || null,
+              tipe_konsultasi: 'gambar',
+              image_analysis: analysis as any,
+            });
+          } catch (saveError) {
+            console.error('Error saving image consultation:', saveError);
+          }
+        }
       }
     } catch (err) {
       console.error('Image analysis failed:', err);
