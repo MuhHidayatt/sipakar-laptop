@@ -5,9 +5,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-interface ImageDiagnosisRequest {
-  imageBase64: string;
+interface ImageData {
+  base64: string;
   mimeType: string;
+}
+
+interface ImageDiagnosisRequest {
+  images: ImageData[];
+  // Legacy support for single image
+  imageBase64?: string;
+  mimeType?: string;
 }
 
 serve(async (req) => {
@@ -25,23 +32,33 @@ serve(async (req) => {
       );
     }
 
-    const { imageBase64, mimeType }: ImageDiagnosisRequest = await req.json();
+    const body: ImageDiagnosisRequest = await req.json();
+    
+    // Handle both new multi-image format and legacy single image format
+    let imagesToProcess: ImageData[] = [];
+    
+    if (body.images && body.images.length > 0) {
+      imagesToProcess = body.images;
+    } else if (body.imageBase64) {
+      // Legacy single image support
+      imagesToProcess = [{ base64: body.imageBase64, mimeType: body.mimeType || 'image/jpeg' }];
+    }
 
-    if (!imageBase64) {
+    if (imagesToProcess.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'No image provided' }),
+        JSON.stringify({ error: 'No images provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Processing image diagnosis, mime type:', mimeType);
+    console.log(`Processing ${imagesToProcess.length} image(s) for diagnosis`);
 
     const systemPrompt = `Anda adalah sistem pakar diagnosa kerusakan laptop yang sangat berpengalaman dalam menganalisis gambar/foto laptop.
 
 Tugas Anda:
-1. Analisis gambar laptop yang diberikan
-2. Identifikasi kerusakan fisik atau masalah yang terlihat
-3. Berikan diagnosa berdasarkan apa yang terlihat di gambar
+1. Analisis semua gambar laptop yang diberikan
+2. Identifikasi kerusakan fisik atau masalah yang terlihat dari setiap gambar
+3. Gabungkan temuan dari semua gambar untuk diagnosa komprehensif
 4. Berikan solusi perbaikan yang sesuai
 
 Jika gambar menunjukkan:
@@ -59,17 +76,37 @@ Berikan respons dalam format JSON:
       "issue": "nama masalah",
       "severity": "ringan" | "sedang" | "berat",
       "location": "lokasi masalah pada laptop",
-      "description": "deskripsi detail masalah"
+      "description": "deskripsi detail masalah",
+      "image_index": number (indeks gambar yang menunjukkan masalah, dimulai dari 0)
     }
   ],
   "confidence": number (0-100),
-  "diagnosis_summary": "ringkasan diagnosa keseluruhan",
+  "diagnosis_summary": "ringkasan diagnosa keseluruhan dari semua gambar",
   "recommended_repairs": ["array solusi perbaikan"],
   "estimated_urgency": "segera" | "dalam waktu dekat" | "bisa ditunda",
-  "additional_notes": "catatan tambahan jika ada"
+  "additional_notes": "catatan tambahan jika ada",
+  "images_analyzed": number (jumlah gambar yang dianalisis)
 }
 
 Jika gambar tidak menunjukkan laptop atau tidak jelas, berikan respons yang sesuai dengan confidence rendah.`;
+
+    // Build content array with all images
+    const userContent: any[] = [
+      {
+        type: 'text',
+        text: `Analisis ${imagesToProcess.length} gambar laptop berikut dan identifikasi semua kerusakan atau masalah yang terlihat:`
+      }
+    ];
+
+    // Add each image to the content
+    for (const img of imagesToProcess) {
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:${img.mimeType};base64,${img.base64}`
+        }
+      });
+    }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -81,25 +118,11 @@ Jika gambar tidak menunjukkan laptop atau tidak jelas, berikan respons yang sesu
         model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
-          { 
-            role: 'user', 
-            content: [
-              {
-                type: 'text',
-                text: 'Analisis gambar laptop berikut dan identifikasi kerusakan atau masalah yang terlihat:'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${mimeType};base64,${imageBase64}`
-                }
-              }
-            ]
-          }
+          { role: 'user', content: userContent }
         ],
         response_format: { type: 'json_object' },
         temperature: 0.3,
-        max_tokens: 2000,
+        max_tokens: 3000,
       }),
     });
 
@@ -138,6 +161,8 @@ Jika gambar tidak menunjukkan laptop atau tidak jelas, berikan respons yang sesu
     let imageAnalysis;
     try {
       imageAnalysis = JSON.parse(aiContent);
+      // Ensure images_analyzed is set
+      imageAnalysis.images_analyzed = imagesToProcess.length;
     } catch (parseError) {
       console.error('Failed to parse AI response:', aiContent);
       imageAnalysis = {
@@ -146,11 +171,12 @@ Jika gambar tidak menunjukkan laptop atau tidak jelas, berikan respons yang sesu
         diagnosis_summary: aiContent,
         recommended_repairs: [],
         estimated_urgency: 'dalam waktu dekat',
-        additional_notes: 'Format respons tidak dapat diproses dengan benar.'
+        additional_notes: 'Format respons tidak dapat diproses dengan benar.',
+        images_analyzed: imagesToProcess.length
       };
     }
 
-    console.log('Image diagnosis completed successfully');
+    console.log(`Image diagnosis completed successfully for ${imagesToProcess.length} image(s)`);
 
     return new Response(
       JSON.stringify({
