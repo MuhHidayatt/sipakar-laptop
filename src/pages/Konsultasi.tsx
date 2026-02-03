@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -101,12 +101,12 @@ export default function Konsultasi() {
   const [aiLoading, setAiLoading] = useState(false);
   
   // Image diagnosis state
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [imageMimeType, setImageMimeType] = useState<string>('');
+  const [selectedImages, setSelectedImages] = useState<{ base64: string; mimeType: string }[]>([]);
   const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
   const [imageAnalyzing, setImageAnalyzing] = useState(false);
   const [showImageResults, setShowImageResults] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('symptoms');
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -228,21 +228,20 @@ export default function Konsultasi() {
     setAiAnalysis(null);
     setAiLoading(false);
     // Reset image state
-    setImageBase64(null);
-    setImageMimeType('');
+    setSelectedImages([]);
     setImageAnalysis(null);
     setShowImageResults(false);
+    setUploadedImageUrls([]);
   };
 
-  const handleImageSelect = (base64: string, mimeType: string) => {
-    setImageBase64(base64);
-    setImageMimeType(mimeType);
+  const handleImagesSelect = useCallback((images: { base64: string; mimeType: string }[]) => {
+    setSelectedImages(images);
     setImageAnalysis(null);
     setShowImageResults(false);
-  };
+  }, []);
 
   const handleImageDiagnose = async () => {
-    if (!imageBase64) {
+    if (selectedImages.length === 0) {
       toast.error('Pilih gambar terlebih dahulu');
       return;
     }
@@ -250,10 +249,45 @@ export default function Konsultasi() {
     setImageAnalyzing(true);
     
     try {
+      // Upload images to storage first
+      const imageUrls: string[] = [];
+      
+      if (user) {
+        for (let i = 0; i < selectedImages.length; i++) {
+          const img = selectedImages[i];
+          const timestamp = Date.now();
+          const ext = img.mimeType.split('/')[1] || 'jpg';
+          const fileName = `${user.id}/${timestamp}_${i}.${ext}`;
+          
+          // Convert base64 to blob
+          const byteCharacters = atob(img.base64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let j = 0; j < byteCharacters.length; j++) {
+            byteNumbers[j] = byteCharacters.charCodeAt(j);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: img.mimeType });
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('consultation-images')
+            .upload(fileName, blob, { contentType: img.mimeType });
+
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+          } else if (uploadData) {
+            const { data: urlData } = supabase.storage
+              .from('consultation-images')
+              .getPublicUrl(uploadData.path);
+            imageUrls.push(urlData.publicUrl);
+          }
+        }
+        setUploadedImageUrls(imageUrls);
+      }
+
+      // Send images to AI for analysis
       const { data, error } = await supabase.functions.invoke('ai-diagnosis-image', {
         body: {
-          imageBase64,
-          mimeType: imageMimeType,
+          images: selectedImages,
         },
       });
 
@@ -267,7 +301,7 @@ export default function Konsultasi() {
         const analysis = data.image_analysis as ImageAnalysis;
         setImageAnalysis(analysis);
         setShowImageResults(true);
-        toast.success('Analisis gambar selesai!');
+        toast.success(`Analisis ${selectedImages.length} gambar selesai!`);
 
         // Save to database if user is logged in
         if (user) {
@@ -282,6 +316,7 @@ export default function Konsultasi() {
               solusi: analysis.recommended_repairs?.join('; ') || null,
               tipe_konsultasi: 'gambar',
               image_analysis: analysis as any,
+              image_urls: imageUrls,
             });
           } catch (saveError) {
             console.error('Error saving image consultation:', saveError);
@@ -297,10 +332,10 @@ export default function Konsultasi() {
   };
 
   const handleImageReset = () => {
-    setImageBase64(null);
-    setImageMimeType('');
+    setSelectedImages([]);
     setImageAnalysis(null);
     setShowImageResults(false);
+    setUploadedImageUrls([]);
   };
 
   const exportPDF = () => {
@@ -730,11 +765,11 @@ export default function Konsultasi() {
                 className="space-y-6"
               >
                 <ImageUploadCard 
-                  onImageSelect={handleImageSelect}
+                  onImagesSelect={handleImagesSelect}
                   isAnalyzing={imageAnalyzing}
                 />
 
-                {imageBase64 && (
+                {selectedImages.length > 0 && (
                   <div className="flex justify-center">
                     <Button
                       size="lg"
@@ -745,12 +780,12 @@ export default function Konsultasi() {
                       {imageAnalyzing ? (
                         <>
                           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          Menganalisis Gambar...
+                          Menganalisis {selectedImages.length} Gambar...
                         </>
                       ) : (
                         <>
                           <Camera className="mr-2 h-5 w-5" />
-                          Analisis Gambar
+                          Analisis {selectedImages.length} Gambar
                         </>
                       )}
                     </Button>

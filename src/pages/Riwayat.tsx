@@ -31,12 +31,14 @@ interface ImageAnalysis {
     severity: string;
     location: string;
     description: string;
+    image_index?: number;
   }>;
   confidence: number;
   diagnosis_summary: string;
   recommended_repairs?: string[];
   estimated_urgency?: string;
   additional_notes?: string;
+  images_analyzed?: number;
 }
 
 interface Konsultasi {
@@ -49,6 +51,7 @@ interface Konsultasi {
   solusi: string | null;
   tipe_konsultasi?: string | null;
   image_analysis?: ImageAnalysis | null;
+  image_urls?: string[] | null;
 }
 
 export default function Riwayat() {
@@ -81,6 +84,7 @@ export default function Riwayat() {
       setKonsultasiList((data || []).map(item => ({
         ...item,
         image_analysis: item.image_analysis as unknown as ImageAnalysis | null,
+        image_urls: (item as any).image_urls as string[] | null,
       })));
     } catch (error) {
       console.error('Error fetching konsultasi:', error);
@@ -241,10 +245,30 @@ export default function Riwayat() {
                           
                           <p className="text-sm text-muted-foreground">
                             {konsultasi.tipe_konsultasi === 'gambar' 
-                              ? `${konsultasi.image_analysis?.detected_issues?.length || 0} masalah terdeteksi`
+                              ? `${konsultasi.image_analysis?.detected_issues?.length || 0} masalah terdeteksi${konsultasi.image_urls?.length ? ` • ${konsultasi.image_urls.length} gambar` : ''}`
                               : `${konsultasi.gejala_dipilih.length} gejala dipilih`
                             }
                           </p>
+                          
+                          {/* Display Images */}
+                          {konsultasi.image_urls && konsultasi.image_urls.length > 0 && (
+                            <div className="flex gap-2 mt-3 flex-wrap">
+                              {konsultasi.image_urls.slice(0, 4).map((url, idx) => (
+                                <div key={idx} className="relative w-16 h-16 rounded overflow-hidden bg-muted">
+                                  <img 
+                                    src={url} 
+                                    alt={`Gambar ${idx + 1}`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              ))}
+                              {konsultasi.image_urls.length > 4 && (
+                                <div className="w-16 h-16 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                                  +{konsultasi.image_urls.length - 4}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                         
                         <div className="flex items-center gap-2">

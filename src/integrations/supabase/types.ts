@@ -72,6 +72,7 @@ export type Database = {
           hasil_kerusakan: string | null
           id: string
           image_analysis: Json | null
+          image_urls: string[] | null
           nama_kerusakan: string | null
           nilai_cf: number | null
           solusi: string | null
@@ -85,6 +86,7 @@ export type Database = {
           hasil_kerusakan?: string | null
           id?: string
           image_analysis?: Json | null
+          image_urls?: string[] | null
           nama_kerusakan?: string | null
           nilai_cf?: number | null
           solusi?: string | null
@@ -98,6 +100,7 @@ export type Database = {
           hasil_kerusakan?: string | null
           id?: string
           image_analysis?: Json | null
+          image_urls?: string[] | null
           nama_kerusakan?: string | null
           nilai_cf?: number | null
           solusi?: string | null
