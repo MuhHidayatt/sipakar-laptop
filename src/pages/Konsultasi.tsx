@@ -213,6 +213,7 @@ export default function Konsultasi() {
           nama_kerusakan: topResult.nama_kerusakan,
           nilai_cf: topResult.nilai_cf,
           solusi: topResult.solusi,
+          tipe_konsultasi: 'gejala',
         });
       } catch (error) {
         console.error('Error saving consultation:', error);
