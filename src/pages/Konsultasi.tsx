@@ -275,10 +275,13 @@ export default function Konsultasi() {
           if (uploadError) {
             console.error('Upload error:', uploadError);
           } else if (uploadData) {
-            const { data: urlData } = supabase.storage
+            // Use signed URL for private bucket
+            const { data: urlData } = await supabase.storage
               .from('consultation-images')
-              .getPublicUrl(uploadData.path);
-            imageUrls.push(urlData.publicUrl);
+              .createSignedUrl(uploadData.path, 3600); // 1 hour expiry
+            if (urlData?.signedUrl) {
+              imageUrls.push(urlData.signedUrl);
+            }
           }
         }
         setUploadedImageUrls(imageUrls);

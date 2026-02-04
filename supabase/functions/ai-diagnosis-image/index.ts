@@ -75,11 +75,44 @@ serve(async (req) => {
       imagesToProcess = [{ base64: body.imageBase64, mimeType: body.mimeType || 'image/jpeg' }];
     }
 
+    // Input validation - limit images and validate format
     if (imagesToProcess.length === 0) {
       return new Response(
         JSON.stringify({ error: 'No images provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    if (imagesToProcess.length > 5) {
+      return new Response(
+        JSON.stringify({ error: 'Too many images. Maximum 5 allowed.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const validMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    for (const img of imagesToProcess) {
+      if (!img.base64 || typeof img.base64 !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'Invalid image data' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Limit to ~10MB per image (base64 is ~1.37x original size)
+      if (img.base64.length > 13700000) {
+        return new Response(
+          JSON.stringify({ error: 'Image too large. Maximum 10MB per image.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (!validMimeTypes.includes(img.mimeType)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid image format. Allowed: JPEG, PNG, WebP' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     console.log(`Processing ${imagesToProcess.length} image(s) for diagnosis, user: ${userId}`);
