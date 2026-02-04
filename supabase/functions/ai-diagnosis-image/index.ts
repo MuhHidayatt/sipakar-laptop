@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,6 +24,36 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.error('Missing or invalid authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      console.error('JWT verification failed:', claimsError);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userId = claimsData.claims.sub;
+    console.log('Authenticated user:', userId);
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       console.error('LOVABLE_API_KEY not configured');
@@ -51,7 +82,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Processing ${imagesToProcess.length} image(s) for diagnosis`);
+    console.log(`Processing ${imagesToProcess.length} image(s) for diagnosis, user: ${userId}`);
 
     const systemPrompt = `Anda adalah sistem pakar diagnosa kerusakan laptop yang sangat berpengalaman dalam menganalisis gambar/foto laptop.
 
@@ -176,7 +207,7 @@ Jika gambar tidak menunjukkan laptop atau tidak jelas, berikan respons yang sesu
       };
     }
 
-    console.log(`Image diagnosis completed successfully for ${imagesToProcess.length} image(s)`);
+    console.log(`Image diagnosis completed successfully for ${imagesToProcess.length} image(s), user: ${userId}`);
 
     return new Response(
       JSON.stringify({
