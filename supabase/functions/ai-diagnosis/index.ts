@@ -66,9 +66,33 @@ serve(async (req) => {
 
     const { symptoms, symptomNames, cfResults }: DiagnosisRequest = await req.json();
 
-    if (!symptoms || symptoms.length === 0) {
+    // Input validation - limit symptoms to prevent resource exhaustion
+    if (!symptoms || !Array.isArray(symptoms) || symptoms.length === 0) {
       return new Response(
         JSON.stringify({ error: 'No symptoms provided' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (symptoms.length > 50) {
+      return new Response(
+        JSON.stringify({ error: 'Too many symptoms. Maximum 50 allowed.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate symptomNames array
+    if (!symptomNames || !Array.isArray(symptomNames) || symptomNames.length !== symptoms.length) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid symptomNames array' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate cfResults array
+    if (!Array.isArray(cfResults) || cfResults.length > 10) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid cfResults array. Maximum 10 results allowed.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
