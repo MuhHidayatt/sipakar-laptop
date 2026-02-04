@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { ImageLightbox } from '@/components/ui/image-lightbox';
 import { 
   History, 
   Loader2, 
@@ -16,7 +17,8 @@ import {
   ChevronRight,
   FileDown,
   Camera,
-  ClipboardList
+  ClipboardList,
+  Expand
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -59,6 +61,15 @@ export default function Riwayat() {
   const navigate = useNavigate();
   const [konsultasiList, setKonsultasiList] = useState<Konsultasi[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const openLightbox = (images: string[], index: number) => {
+    setLightboxImages(images);
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -252,20 +263,30 @@ export default function Riwayat() {
                           
                           {/* Display Images */}
                           {konsultasi.image_urls && konsultasi.image_urls.length > 0 && (
-                            <div className="flex gap-2 mt-3 flex-wrap">
+                            <div className="flex gap-2 mt-3 flex-wrap items-center">
                               {konsultasi.image_urls.slice(0, 4).map((url, idx) => (
-                                <div key={idx} className="relative w-16 h-16 rounded overflow-hidden bg-muted">
+                                <button
+                                  key={idx}
+                                  onClick={() => openLightbox(konsultasi.image_urls!, idx)}
+                                  className="relative w-16 h-16 rounded overflow-hidden bg-muted group cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                                >
                                   <img 
                                     src={url} 
                                     alt={`Gambar ${idx + 1}`}
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
                                   />
-                                </div>
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                                    <Expand className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </div>
+                                </button>
                               ))}
                               {konsultasi.image_urls.length > 4 && (
-                                <div className="w-16 h-16 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                                <button
+                                  onClick={() => openLightbox(konsultasi.image_urls!, 4)}
+                                  className="w-16 h-16 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                                >
                                   +{konsultasi.image_urls.length - 4}
-                                </div>
+                                </button>
                               )}
                             </div>
                           )}
@@ -300,6 +321,14 @@ export default function Riwayat() {
           )}
         </div>
       </div>
+
+      {/* Image Lightbox */}
+      <ImageLightbox
+        images={lightboxImages}
+        initialIndex={lightboxIndex}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+      />
     </Layout>
   );
 }
