@@ -105,11 +105,37 @@ export default function Riwayat() {
         .order('tanggal', { ascending: false });
 
       if (error) throw error;
-      setKonsultasiList((data || []).map(item => ({
-        ...item,
-        image_analysis: item.image_analysis as unknown as ImageAnalysis | null,
-        image_urls: (item as any).image_urls as string[] | null,
-      })));
+      
+      // Process data and generate signed URLs for private images
+      const processedData = await Promise.all((data || []).map(async (item) => {
+        let signedImageUrls: string[] | null = null;
+        
+        if (item.image_urls && item.image_urls.length > 0) {
+          // Extract file paths from URLs and generate signed URLs
+          const signedUrls = await Promise.all(
+            item.image_urls.map(async (url: string) => {
+              // Extract path: consultation-images/user_id/filename -> user_id/filename
+              const match = url.match(/consultation-images\/(.+)$/);
+              if (match) {
+                const { data: signedData } = await supabase.storage
+                  .from('consultation-images')
+                  .createSignedUrl(match[1], 3600); // 1 hour expiry
+                return signedData?.signedUrl || url;
+              }
+              return url;
+            })
+          );
+          signedImageUrls = signedUrls;
+        }
+        
+        return {
+          ...item,
+          image_analysis: item.image_analysis as unknown as ImageAnalysis | null,
+          image_urls: signedImageUrls || (item as any).image_urls as string[] | null,
+        };
+      }));
+      
+      setKonsultasiList(processedData);
     } catch (error) {
       console.error('Error fetching konsultasi:', error);
       toast.error('Gagal memuat riwayat');
