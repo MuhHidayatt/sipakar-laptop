@@ -4,21 +4,31 @@ import { Layout } from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { interpretCF } from '@/lib/diagnosis-engine';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { 
   History, 
   Loader2, 
   Calendar, 
   AlertCircle,
-  ChevronRight,
   FileDown,
   Camera,
   ClipboardList,
-  Expand
+  Expand,
+  Trash2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -64,6 +74,9 @@ export default function Riwayat() {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [konsultasiToDelete, setKonsultasiToDelete] = useState<Konsultasi | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const openLightbox = (images: string[], index: number) => {
     setLightboxImages(images);
@@ -102,6 +115,55 @@ export default function Riwayat() {
       toast.error('Gagal memuat riwayat');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (konsultasi: Konsultasi) => {
+    setKonsultasiToDelete(konsultasi);
+    setDeleteDialogOpen(true);
+  };
+
+  const deleteKonsultasi = async () => {
+    if (!konsultasiToDelete || !user) return;
+    
+    setDeleting(true);
+    try {
+      // Delete images from storage if they exist
+      if (konsultasiToDelete.image_urls && konsultasiToDelete.image_urls.length > 0) {
+        const filePaths = konsultasiToDelete.image_urls.map(url => {
+          // Extract path from URL: consultation-images/user_id/filename
+          const match = url.match(/consultation-images\/(.+)$/);
+          return match ? match[1] : null;
+        }).filter(Boolean) as string[];
+
+        if (filePaths.length > 0) {
+          const { error: storageError } = await supabase.storage
+            .from('consultation-images')
+            .remove(filePaths);
+          
+          if (storageError) {
+            console.error('Error deleting images:', storageError);
+          }
+        }
+      }
+
+      // Delete the consultation record
+      const { error } = await supabase
+        .from('konsultasi')
+        .delete()
+        .eq('id', konsultasiToDelete.id);
+
+      if (error) throw error;
+
+      setKonsultasiList(prev => prev.filter(k => k.id !== konsultasiToDelete.id));
+      toast.success('Riwayat berhasil dihapus');
+    } catch (error) {
+      console.error('Error deleting konsultasi:', error);
+      toast.error('Gagal menghapus riwayat');
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+      setKonsultasiToDelete(null);
     }
   };
 
@@ -301,6 +363,14 @@ export default function Riwayat() {
                             <FileDown className="h-4 w-4 mr-2" />
                             PDF
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteClick(konsultasi)}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                       
@@ -329,6 +399,35 @@ export default function Riwayat() {
         open={lightboxOpen}
         onOpenChange={setLightboxOpen}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Riwayat Konsultasi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tindakan ini tidak dapat dibatalkan. Riwayat konsultasi dan semua gambar terkait akan dihapus secara permanen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteKonsultasi}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                'Hapus'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }
