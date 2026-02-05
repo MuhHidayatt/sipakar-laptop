@@ -13,7 +13,7 @@ export function Layout({ children }: LayoutProps) {
       </main>
       <footer className="border-t border-border py-6 mt-auto">
         <div className="container text-center text-sm text-muted-foreground">
-          <p>© 2024 SIPAKAR LAPTOP. Sistem Pakar Diagnosa Kerusakan Laptop.</p>
+          <p>© 2026 SIPAKAR LAPTOP. Sistem Pakar Diagnosa Kerusakan Laptop.</p>
           <p className="mt-1">Menggunakan metode Forward Chaining & Certainty Factor</p>
         </div>
       </footer>
